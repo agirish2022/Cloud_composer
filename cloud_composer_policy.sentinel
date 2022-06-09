@@ -1,0 +1,52 @@
+import "tfplan-functions" as plan
+import "strings"
+import "types"
+
+
+cloudComposerInstances = plan.find_resources("google_composer_environment")
+
+# enable_private_endpoint value true
+PRIVATE_ENDPOINT_POLICY = false
+for cloudComposerInstances as address, rc {
+	cc_private_endpoint = plan.evaluate_attribute(rc, "config.0.private_environment_config.0.enable_private_endpoint")
+	
+    if types.type_of(cc_private_endpoint) is "undefined" or types.type_of(cc_private_endpoint) is "null" {
+		print("The value for enable_private_endpoint" + address + " can't be null")
+	}else {
+		if types.type_of(cc_private_endpoint) is "bool" and cc_private_endpoint == true {
+			PRIVATE_ENDPOINT_POLICY = true
+		}
+    }
+}
+
+# google_composer_environment.config.software_config.image_version value should start with composer-2*
+IMAGE_VERSION_POLICY = false
+for cloudComposerInstances as address, rc {
+    cc_image_version = plan.evaluate_attribute(rc, "config.0.software_config.0.image_version")
+
+   if types.type_of(cc_image_version) is "undefined" or types.type_of(cc_image_version) is "null" {
+		print("The value for image version" + address + " can't be null")
+	}else {
+		if types.type_of(cc_image_version) is "string" and strings.has_prefix(cc_image_version, "composer-2")  {
+			IMAGE_VERSION_POLICY = true
+		}
+    }
+}   
+
+# google_composer_environment.config.software_config.airflow_config_overrides
+AIRFLOW_CONFIG_POLICY = false
+for cloudComposerInstances as address, rc {
+    cc_airflow_config_overrides = plan.evaluate_attribute(rc, "config.0.software_config.0.airflow_config_overrides")
+    
+   if types.type_of(cc_airflow_config_overrides) is "undefined" or types.type_of(cc_airflow_config_overrides) is "null" {
+		print("The value for airflow_config_overrides" + address + " can't be null")
+	}else {
+		for cc_airflow_config_overrides as cc_key, cc_value {
+			if  cc_key == "webserver-rbac_user_registration_role" {
+                AIRFLOW_CONFIG_POLICY = true
+                }
+		}
+    }
+}    
+
+main = rule { PRIVATE_ENDPOINT_POLICY and IMAGE_VERSION_POLICY and AIRFLOW_CONFIG_POLICY }
