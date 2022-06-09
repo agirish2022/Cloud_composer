@@ -1,0 +1,61 @@
+import "tfplan-functions" as plan
+import "strings"
+import "types"
+
+
+cloudComposerInstances = plan.find_resources("google_composer_environment")
+
+# enable_private_endpoint value true
+violations_endpoint = {}
+for cloudComposerInstances as address, rc {
+	cc_private_endpoint = plan.evaluate_attribute(rc, "config.0.private_environment_config.0.enable_private_endpoint")
+	
+    if types.type_of(cc_private_endpoint) is "undefined" or types.type_of(cc_private_endpoint) is "null" {
+		violations_endpoint[address] = rc
+		print("The value for enable_private_endpoint in Resource " + address + " can't be null or undefined")	
+	}else {
+		if not cc_private_endpoint == true {
+			violations_endpoint[address] = rc
+			print("The value for enable_private_endpoint in Resource " + address + " must be true")		
+		}
+    }
+}
+GCP_COMPOSER_PRIVATE = rule { length(violations_endpoint) is 0 }
+
+# google_composer_environment.config.software_config.image_version value should start with composer-2*
+violations_env_version = {}
+for cloudComposerInstances as address, rc {
+    cc_image_version = plan.evaluate_attribute(rc, "config.0.software_config.0.image_version")
+
+    if types.type_of(cc_image_version) is "undefined" or types.type_of(cc_image_version) is "null" {
+		violations_env_version[address] = rc
+		print("The value for image version in Resource " + address + " can't be null or undefined")
+	}else {
+		if not strings.has_prefix(cc_image_version, "composer-2")  {
+			violations_env_version[address] = rc
+			print("The value for image version in Resource " + address + " can only start with composer-2")
+		}
+    }
+}   
+GCP_COMPOSER_ENV_VERSION = rule { length(violations_env_version) is 0 }
+
+# google_composer_environment.config.software_config.airflow_config_overrides
+violations_rbac = {}
+for cloudComposerInstances as address, rc {
+   cc_airflow_config_overrides = plan.evaluate_attribute(rc, "config.0.software_config.0.airflow_config_overrides")
+    
+   if types.type_of(cc_airflow_config_overrides) is "undefined" or types.type_of(cc_airflow_config_overrides) is "null" {
+		print("The value for airflow_config_overrides" + address + " can't be null or undefined")
+	}else {
+		for cc_airflow_config_overrides as cc_key, cc_value {
+			if not ( cc_key == "webserver-rbac_user_registration_role" ) {
+                violations_rbac[address] = rc
+				print("airflow_config_overrides value must be webserver-rbac_user_registration_role in resource " + address)
+                }
+		}
+    }
+}    
+
+GCP_COMPOSER_RBAC = rule { length(violations_rbac) is 0 }
+
+main = rule { GCP_COMPOSER_PRIVATE and GCP_COMPOSER_ENV_VERSION and GCP_COMPOSER_RBAC}
